@@ -1047,14 +1047,14 @@ function excluirCliente(cpf){
 
 // ===== EXCLUIR LANCAMENTO =====
 function excluirLancamento(id){
-  const reg = resgates.find(r=>r.id===id);
+  const reg = resgates.find(r=>String(r.id)===String(id));
   const p = reg ? PECAS.find(x=>x.id===(reg.pecaId||reg.pecaid)) : null;
   const nomePeca = p ? p.nome : "este lançamento";
   pedirSenhaExclusao(
     `⚠️ Excluir o lançamento de <strong>${nomePeca}</strong>?<br><br>Esta ação não pode ser desfeita.`,
     async ()=>{
       await deleteResgate(id);
-      resgates = resgates.filter(r=>r.id!==id);
+      resgates = resgates.filter(r=>String(r.id)!==String(id));
       renderHistorico(); renderMiniStats(); renderRelatorio();
       if(clienteAtivo){ renderClienteBadge(); renderPecas(); }
     }
@@ -1115,14 +1115,14 @@ function abrirDesfazerResgate(){
 }
 
 async function confirmarDesfazer(id){
-  const reg = resgates.find(r=>r.id===id);
+  const reg = resgates.find(r=>String(r.id)===String(id));
   if(!reg) return;
   const p = PECAS.find(x=>x.id===(reg.pecaId||reg.pecaid));
   pedirSenhaExclusao(
     `⚠️ Remover o resgate de <strong>${p.nome}</strong> deste cliente?<br><br>Esta ação não pode ser desfeita.`,
     async ()=>{
       await deleteResgate(id);
-      resgates = resgates.filter(r=>r.id!==id);
+      resgates = resgates.filter(r=>String(r.id)!==String(id));
       renderMiniStats(); renderHistorico();
       if(clienteAtivo){
         renderClienteBadge(); renderPecas();
