@@ -776,57 +776,61 @@ function imprimirComprovante(reg, cl, p){
 <title>Comprovante de Resgate</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{background:#fff;font-family:'Courier New',Courier,monospace;font-size:12px;color:#000;padding:10px}
-  .wrap{width:72mm;margin:0 auto}
-  h1{font-size:15px;font-weight:bold;text-align:center;letter-spacing:1px}
+  @page{size:80mm auto;margin:0}
+  body{background:#fff;font-family:'Arial','Helvetica',sans-serif;font-size:15px;color:#000;padding:4mm;width:80mm;margin:0 auto;line-height:1.4}
+  .wrap{width:100%}
+  h1{font-size:20px;font-weight:900;text-align:center;margin-bottom:2px}
   .center{text-align:center}
-  .dashed{border-top:1px dashed #000;margin:7px 0}
-  .row{display:flex;justify-content:space-between;margin:3px 0;font-size:11px}
+  .dashed{border-top:2px dashed #000;margin:8px 0}
+  .row{display:flex;justify-content:space-between;margin:5px 0;font-size:14px}
   .bold{font-weight:bold}
-  .section{margin-bottom:6px;padding-bottom:6px;border-bottom:1px dashed #000}
-  .peca-img{width:55mm;display:block;margin:6px auto}
-  .title{font-weight:bold;font-size:12px;margin-bottom:3px;text-decoration:underline}
-  .footer{text-align:center;font-size:10px;margin-top:8px;line-height:1.6}
-  @media print{body{margin:0;padding:0}}
+  .section{margin-bottom:8px;padding-bottom:8px;border-bottom:2px dashed #000}
+  .peca-img{width:50mm;display:block;margin:8px auto}
+  .title{font-weight:900;font-size:15px;margin-bottom:5px;text-transform:uppercase}
+  .footer{text-align:center;font-size:13px;margin-top:10px;line-height:1.6}
+  .subtitle{font-size:14px;margin:2px 0}
+  .destaque{font-size:16px;font-weight:900}
+  .protocolo{font-size:11px;word-break:break-all;margin-top:3px}
+  @media print{body{margin:0;padding:4mm;width:80mm}}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="section center">
     <h1>CLUBE DE SELOS ROYAL</h1>
-    <div>Germer Verdigris - Campanha 2026</div>
-    <div>15/06/2026 a 05/09/2026</div>
+    <div class="subtitle">Germer Verdigris - Campanha 2026</div>
+    <div class="subtitle">15/06/2026 a 05/09/2026</div>
     <div class="dashed"></div>
-    <div class="bold">*** COMPROVANTE DE RESGATE ***</div>
-    <div>${dataStr}</div>
+    <div class="destaque">COMPROVANTE DE RESGATE</div>
+    <div style="font-size:14px;margin-top:4px">${dataStr}</div>
   </div>
   <div class="section">
     <div class="title">CLIENTE</div>
-    <div class="row"><span>Nome:</span><span>${cl.nome}</span></div>
+    <div class="row"><span>Nome:</span><span class="bold">${cl.nome}</span></div>
     <div class="row"><span>CPF:</span><span>${cpfFmt(cl.cpf)}</span></div>
   </div>
   <div class="section center">
-    <div class="title">PRODUTO SELECIONADO</div>
+    <div class="title">PRODUTO</div>
     <img class="peca-img" src="${p.img}" alt="${p.nome}">
-    <div class="bold">${p.nome}</div>
-    <div style="font-size:10px;margin-top:3px">${p.nome_completo}</div>
+    <div class="destaque">${p.nome}</div>
+    <div style="font-size:13px;margin-top:4px">${p.nome_completo}</div>
   </div>
   <div class="section">
-    <div class="title">MODALIDADE DE TROCA — TABELA ${reg.tabela}</div>
+    <div class="title">TROCA - TABELA ${reg.tabela}</div>
     <div class="dashed"></div>
-    <div class="row bold"><span>Selos necessarios:</span><span>${tab.selos} selos</span></div>
-    <div class="row bold"><span>Valor complementar:</span><span>R$ ${tab.compl.toFixed(2).replace('.',',')}</span></div>
+    <div class="row destaque"><span>Selos:</span><span>${tab.selos} selos</span></div>
+    <div class="row destaque"><span>Complemento:</span><span>R$ ${tab.compl.toFixed(2).replace('.',',')}</span></div>
     <div class="dashed"></div>
     <div class="row"><span>Preco original:</span><span>R$ ${p.preco.toFixed(2).replace('.',',')}</span></div>
   </div>
-  <div class="section" style="font-size:10px">
-    <div class="row"><span>Protocolo:</span></div>
-    <div style="font-size:9px;word-break:break-all">${reg.id}</div>
+  <div class="section">
+    <div style="font-size:13px;font-weight:bold">Protocolo:</div>
+    <div class="protocolo">${reg.id}</div>
   </div>
   <div class="footer">
     <div>Selos e cartelas retidos no ato do resgate.</div>
-    <div>Consulte o regulamento em superroyal.com.br</div>
-    <div class="bold">Obrigado pela preferencia!</div>
+    <div>Regulamento: superroyal.com.br</div>
+    <div class="bold" style="font-size:15px;margin-top:6px">Obrigado pela preferencia!</div>
   </div>
 </div>
 <script>window.onload=function(){window.print();window.onafterprint=function(){window.close();};}<\/script>
@@ -838,6 +842,17 @@ function imprimirComprovante(reg, cl, p){
   } else {
     alert('Permita pop-ups para esta página para imprimir o comprovante.');
   }
+}
+
+// ===== REIMPRIMIR COMPROVANTE =====
+function reimprimirComprovante(id){
+  const reg = resgates.find(r=>String(r.id)===String(id));
+  if(!reg){ alert('Resgate não encontrado.'); return; }
+  const cl = clientes.find(c=>c.cpf===reg.cpf);
+  if(!cl){ alert('Cliente não encontrado.'); return; }
+  const p = PECAS.find(x=>x.id===(reg.pecaId||reg.pecaid));
+  if(!p){ alert('Produto não encontrado.'); return; }
+  imprimirComprovante(reg, cl, p);
 }
 
 // ===== CADASTRO =====
@@ -1006,7 +1021,7 @@ function renderHistorico(){
   const lista=resgates.filter(r=>!q||r.cpf.includes(q)||r.nomeCliente.toLowerCase().includes(q)).sort((a,b)=>new Date(b.data)-new Date(a.data));
   const el=document.getElementById("tabela-historico");
   if(!lista.length){el.innerHTML=`<div class="empty-state"><i class="ti ti-inbox"></i><p>Nenhum resgate registrado.</p></div>`;return;}
-  el.innerHTML=`<table><thead><tr>
+  el.innerHTML=`<table style="white-space:nowrap"><thead><tr>
     <th>Data</th><th>Cliente</th><th>CPF</th><th>Produto</th><th>Tabela</th><th>Selos</th><th>Complemento</th><th></th>
   </tr></thead><tbody>${lista.map(r=>{
     const p=PECAS.find(x=>x.id===(r.pecaId||r.pecaid));
@@ -1014,11 +1029,11 @@ function renderHistorico(){
       <td style="font-size:11px;color:var(--text2)">${dataFmt(r.data)}</td>
       <td><div style="display:flex;align-items:center;gap:6px"><div class="search-avatar" style="width:26px;height:26px;font-size:10px;flex-shrink:0">${initials(r.nomeCliente)}</div>${r.nomeCliente}</div></td>
       <td class="mono" style="font-size:11px">${cpfFmt(r.cpf)}</td>
-      <td><img src="${p?.img||''}" style="width:24px;height:24px;object-fit:contain;vertical-align:middle;margin-right:4px">${r.pecaNome.split("–")[0]}</td>
+      <td><img src="${p?.img||""}" style="width:24px;height:24px;object-fit:contain;vertical-align:middle;margin-right:4px">${r.pecaNome.split("–")[0]}</td>
       <td><span class="badge ${r.tabela==='I'?'badge-blue':'badge-orange'}">Tab. ${r.tabela}</span></td>
       <td><strong>${r.selos}</strong></td>
       <td>${moeda(r.compl)}</td>
-      <td><button class="btn btn-sm" style="background:#fff5f5;color:var(--red);border:1.5px solid var(--red-b);gap:4px;font-size:12px" onclick="excluirLancamento('${r.id}')"><i class="ti ti-trash" style="font-size:12px"></i> Excluir</button></td>
+      <td style="white-space:nowrap"><button class="btn btn-sm" style="background:var(--royal-blue-light);color:var(--royal-blue);border:1.5px solid #bfdbfe;gap:4px;font-size:12px;margin-right:4px" onclick="reimprimirComprovante('${r.id}')"><i class="ti ti-printer" style="font-size:12px"></i> Reimprimir</button><button class="btn btn-sm" style="background:#fff5f5;color:var(--red);border:1.5px solid var(--red-b);gap:4px;font-size:12px" onclick="excluirLancamento('${r.id}')"><i class="ti ti-trash" style="font-size:12px"></i> Excluir</button></td>
     </tr>`;
   }).join("")}</tbody></table>`;
 }
