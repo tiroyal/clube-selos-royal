@@ -1162,10 +1162,12 @@ async function executarExclusao(){
     document.getElementById("excluir-senha-input").focus();
     return;
   }
-  // Save callback BEFORE closing (fecharModalExclusao nulls it)
   const cb = _excluirCallback;
-  fecharModalExclusao();
-  if(cb) await cb();
+  _excluirCallback = null;
+  document.getElementById("modal-excluir-senha").classList.remove("open");
+  if(cb){
+    try{ await cb(); }catch(e){ console.error("Erro na exclusão:", e); alert("Erro ao excluir: "+e.message); }
+  }
 }
 
 // ===== UTIL =====
@@ -1203,7 +1205,7 @@ function showAlertEl(elId, type, msg){
 </div>
 
 <!-- ===== MODAL CONFIRMAR EXCLUSÃO COM SENHA ===== -->
-<div class="overlay" id="modal-excluir-senha">
+<div class="overlay" id="modal-excluir-senha" onclick="if(event.target===this)return;">
   <div class="modal" style="max-width:400px">
     <div class="modal-header">
       <h3 style="color:var(--red)"><i class="ti ti-shield-lock" style="color:var(--red)"></i> Confirmar exclusão</h3>
