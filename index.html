@@ -373,7 +373,7 @@ tr:hover td{background:#fafbfd}
   </div>
 
   <!-- ===== ABA HISTORICO ===== -->
-  <div class="app-content" id="tab-historico" style="display:none">
+  <div class="app-content" id="tab-historico" style="display:none;max-width:100%;padding:1.5rem 0.5rem 3rem">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:8px">
       <span class="section-title"><i class="ti ti-list"></i> Histórico de resgates</span>
       <button class="btn btn-outline btn-sm" onclick="exportarCSV()"><i class="ti ti-download"></i> CSV</button>
@@ -385,7 +385,7 @@ tr:hover td{background:#fafbfd}
           <input type="text" class="input-icon" id="filtro-hist" placeholder="Filtrar por CPF ou nome..." oninput="renderHistorico()">
         </div>
       </div>
-      <div class="table-wrap"><div id="tabela-historico"></div></div>
+      <div id="tabela-historico" style="overflow-x:auto"></div>
     </div>
   </div>
 </div>
@@ -951,8 +951,7 @@ function renderRelatorio(){
     {ic:"ti-users",c:"#1d6954",bg:"#ecfdf5",v:clientes.length,l:"Clientes cadastrados",s:cpfsUnicos+" com resgate"},
     {ic:"ti-stamp",c:"#d97706",bg:"#fffbeb",v:totalSelos,l:"Selos trocados",s:"total acumulado"},
     {ic:"ti-calendar",c:"#7c3aed",bg:"#f5f3ff",v:hj,l:"Resgates hoje",s:""},
-    {ic:"ti-trophy",c:"#16a34a",bg:"#dcfce7",v:completos,l:"Coleções completas",s:"5 peças/cliente"},
-    {ic:"ti-cash",c:"#e11d48",bg:"#fff1f2",v:totCompl,l:"Valor complementar total",s:""}
+    {ic:"ti-trophy",c:"#16a34a",bg:"#dcfce7",v:completos,l:"Coleções completas",s:"5 peças/cliente"}
   ].map(s=>`<div class="stat-card">
     <div class="stat-icon" style="background:${s.bg}"><i class="ti ${s.ic}" style="font-size:20px;color:${s.c}"></i></div>
     <div class="stat-val">${s.v}</div>
