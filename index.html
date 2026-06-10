@@ -1154,7 +1154,7 @@ function fecharModalExclusao(){
   _excluirCallback = null;
 }
 
-function executarExclusao(){
+async function executarExclusao(){
   const senha = document.getElementById("excluir-senha-input").value;
   if(senha !== SENHA_EXCLUIR){
     document.getElementById("excluir-senha-err").style.display = "block";
@@ -1162,8 +1162,10 @@ function executarExclusao(){
     document.getElementById("excluir-senha-input").focus();
     return;
   }
+  // Save callback BEFORE closing (fecharModalExclusao nulls it)
+  const cb = _excluirCallback;
   fecharModalExclusao();
-  if(_excluirCallback) _excluirCallback();
+  if(cb) await cb();
 }
 
 // ===== UTIL =====
