@@ -1026,34 +1026,39 @@ function renderHistorico(){
 
 
 // ===== EXCLUIR CLIENTE =====
-async function excluirCliente(cpf){
+function excluirCliente(cpf){
   const cl = clientes.find(x=>x.cpf===cpf);
   if(!cl) return;
   const qtdResgates = resgates.filter(r=>r.cpf===cpf).length;
   const msg = qtdResgates > 0
-    ? `Excluir o cliente "${cl.nome}" e todos os seus ${qtdResgates} resgate(s) vinculados? Esta ação não pode ser desfeita.`
-    : `Excluir o cliente "${cl.nome}"? Esta ação não pode ser desfeita.`;
-  if(!confirm(msg)) return;
-  await deleteClienteEResgates(cpf);
-  clientes = clientes.filter(x=>x.cpf!==cpf);
-  resgates = resgates.filter(r=>r.cpf!==cpf);
-  renderClientes();
-  renderMiniStats();
-  renderRelatorio();
-  renderHistorico();
-  if(clienteAtivo && clienteAtivo.cpf===cpf){
-    clienteAtivo=null;
-    document.getElementById('resgate-area').style.display='none';
-  }
+    ? `⚠️ Excluir o cliente <strong>${cl.nome}</strong> e todos os seus <strong>${qtdResgates} resgate(s)</strong> vinculados?<br><br>Esta ação não pode ser desfeita.`
+    : `⚠️ Excluir o cliente <strong>${cl.nome}</strong>?<br><br>Esta ação não pode ser desfeita.`;
+  pedirSenhaExclusao(msg, async ()=>{
+    await deleteClienteEResgates(cpf);
+    clientes = clientes.filter(x=>x.cpf!==cpf);
+    resgates = resgates.filter(r=>r.cpf!==cpf);
+    renderClientes(); renderMiniStats(); renderRelatorio(); renderHistorico();
+    if(clienteAtivo && clienteAtivo.cpf===cpf){
+      clienteAtivo=null;
+      document.getElementById('resgate-area').style.display='none';
+    }
+  });
 }
 
 // ===== EXCLUIR LANCAMENTO =====
-async function excluirLancamento(id){
-  if(!confirm("Excluir este lançamento? Esta ação não pode ser desfeita.")) return;
-  await deleteResgate(id);
-  resgates = resgates.filter(r=>r.id!==id);
-  renderHistorico(); renderMiniStats(); renderRelatorio();
-  if(clienteAtivo){ renderClienteBadge(); renderPecas(); }
+function excluirLancamento(id){
+  const reg = resgates.find(r=>r.id===id);
+  const p = reg ? PECAS.find(x=>x.id===(reg.pecaId||reg.pecaid)) : null;
+  const nomePeca = p ? p.nome : "este lançamento";
+  pedirSenhaExclusao(
+    `⚠️ Excluir o lançamento de <strong>${nomePeca}</strong>?<br><br>Esta ação não pode ser desfeita.`,
+    async ()=>{
+      await deleteResgate(id);
+      resgates = resgates.filter(r=>r.id!==id);
+      renderHistorico(); renderMiniStats(); renderRelatorio();
+      if(clienteAtivo){ renderClienteBadge(); renderPecas(); }
+    }
+  );
 }
 
 // ===== EXPORT =====
@@ -1113,22 +1118,52 @@ async function confirmarDesfazer(id){
   const reg = resgates.find(r=>r.id===id);
   if(!reg) return;
   const p = PECAS.find(x=>x.id===(reg.pecaId||reg.pecaid));
-  if(!confirm('Remover o resgate de "' + p.nome + '" deste cliente? Esta ação não pode ser desfeita.')) return;
-  await deleteResgate(id);
-  resgates = resgates.filter(r=>r.id!==id);
-  renderMiniStats();
-  renderHistorico();
-  if(clienteAtivo){
-    renderClienteBadge();
-    renderPecas();
-    document.getElementById('opcoes-section').style.display='none';
-    pecaSel=null; opcaoSel=null;
-    abrirDesfazerResgate();
-    const remaining = resgates.filter(r=>r.cpf===clienteAtivo.cpf);
-    if(remaining.length===0){
-      setTimeout(()=>fecharModal('modal-desfazer'), 500);
+  pedirSenhaExclusao(
+    `⚠️ Remover o resgate de <strong>${p.nome}</strong> deste cliente?<br><br>Esta ação não pode ser desfeita.`,
+    async ()=>{
+      await deleteResgate(id);
+      resgates = resgates.filter(r=>r.id!==id);
+      renderMiniStats(); renderHistorico();
+      if(clienteAtivo){
+        renderClienteBadge(); renderPecas();
+        document.getElementById('opcoes-section').style.display='none';
+        pecaSel=null; opcaoSel=null;
+        abrirDesfazerResgate();
+        const remaining = resgates.filter(r=>r.cpf===clienteAtivo.cpf);
+        if(remaining.length===0) setTimeout(()=>fecharModal('modal-desfazer'), 500);
+      }
     }
+  );
+}
+
+// ===== MODAL EXCLUSÃO COM SENHA =====
+const SENHA_EXCLUIR = "123456";
+let _excluirCallback = null;
+
+function pedirSenhaExclusao(mensagem, callback){
+  document.getElementById("excluir-msg").innerHTML = mensagem;
+  document.getElementById("excluir-senha-input").value = "";
+  document.getElementById("excluir-senha-err").style.display = "none";
+  _excluirCallback = callback;
+  document.getElementById("modal-excluir-senha").classList.add("open");
+  setTimeout(()=>document.getElementById("excluir-senha-input").focus(), 150);
+}
+
+function fecharModalExclusao(){
+  document.getElementById("modal-excluir-senha").classList.remove("open");
+  _excluirCallback = null;
+}
+
+function executarExclusao(){
+  const senha = document.getElementById("excluir-senha-input").value;
+  if(senha !== SENHA_EXCLUIR){
+    document.getElementById("excluir-senha-err").style.display = "block";
+    document.getElementById("excluir-senha-input").value = "";
+    document.getElementById("excluir-senha-input").focus();
+    return;
   }
+  fecharModalExclusao();
+  if(_excluirCallback) _excluirCallback();
 }
 
 // ===== UTIL =====
@@ -1161,6 +1196,33 @@ function showAlertEl(elId, type, msg){
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="fecharModal('modal-desfazer')"><i class="ti ti-x"></i> Fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL CONFIRMAR EXCLUSÃO COM SENHA ===== -->
+<div class="overlay" id="modal-excluir-senha">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <h3 style="color:var(--red)"><i class="ti ti-shield-lock" style="color:var(--red)"></i> Confirmar exclusão</h3>
+      <button class="btn-modal-close" onclick="fecharModalExclusao()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="excluir-msg" style="background:var(--red-l);border:1.5px solid var(--red-b);border-radius:var(--r);padding:.85rem 1rem;margin-bottom:1.25rem;font-size:13px;color:var(--red);font-weight:600;line-height:1.5"></div>
+      <div class="field-group">
+        <label class="field-label">Digite a senha de exclusão para confirmar</label>
+        <div class="input-wrap">
+          <i class="ti ti-lock icon-pre"></i>
+          <input type="password" class="input-icon" id="excluir-senha-input" placeholder="Senha de exclusão" onkeydown="if(event.key==='Enter')executarExclusao()" oninput="document.getElementById('excluir-senha-err').style.display='none'">
+        </div>
+        <div id="excluir-senha-err" style="display:none;font-size:12px;color:var(--red);font-weight:700;margin-top:5px"><i class="ti ti-alert-circle"></i> Senha incorreta.</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="fecharModalExclusao()"><i class="ti ti-x"></i> Cancelar</button>
+      <button class="btn btn-sm" style="background:var(--red);color:#fff;border:none;gap:5px;padding:9px 16px;font-size:13px;font-weight:700" onclick="executarExclusao()">
+        <i class="ti ti-trash"></i> Confirmar exclusão
+      </button>
     </div>
   </div>
 </div>
