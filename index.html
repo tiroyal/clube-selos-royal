@@ -477,12 +477,14 @@ function initSupabase(){
 async function loadAll(){
   showLoadingOverlay(true);
   try {
-    const [{ data: cls }, { data: res }] = await Promise.all([
-      sb.from("clientes").select("*").order("nome"),
-      sb.from("resgates").select("*").order("data", { ascending: false })
+    const [resClientes, resResgates] = await Promise.all([
+      sb.from("clientes").select("cpf, nome, datacad").order("nome"),
+      sb.from("resgates").select("id, cpf, nomecliente, pecaid, pecanome, tabela, selos, compl, data").order("data", { ascending: false })
     ]);
-    clientes = cls || [];
-    resgates = res || [];
+    if(resClientes.error) console.error("Clientes error:", resClientes.error);
+    if(resResgates.error) console.error("Resgates error:", resResgates.error);
+    clientes = resClientes.data || [];
+    resgates = resResgates.data || [];
   } catch(e) {
     console.error("Erro ao carregar dados:", e);
     clientes = []; resgates = [];
@@ -490,8 +492,11 @@ async function loadAll(){
   // Normalize Supabase lowercase column names to camelCase
   clientes = clientes.map(c => ({
     ...c,
+    nome: c.nome || "",
+    cpf: c.cpf || "",
     dataCad: c.datacad || c.dataCad || c.created_at || ""
   }));
+  console.log("Loaded:", clientes.length, "clientes,", resgates.length, "resgates");
   resgates = resgates.map(r => ({
     ...r,
     nomeCliente: r.nomecliente || r.nomeCliente || "",
@@ -588,7 +593,7 @@ function validarCPF(cpf){
 }
 function cpfFmt(raw){ return raw.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,"$1.$2.$3-$4"); }
 function cpfRaw(s){ return s.replace(/\D/g,""); }
-function initials(nome){ return nome.split(" ").slice(0,2).map(w=>w[0]).join("").toUpperCase(); }
+function initials(nome){ if(!nome) return '?'; return nome.split(" ").slice(0,2).map(w=>w[0]).join("").toUpperCase(); }
 function moeda(v){ return "R$ "+v.toFixed(2).replace(".",","); }
 function hoje(){ return new Date().toDateString(); }
 function dataFmt(iso){ return new Date(iso).toLocaleString("pt-BR"); }
@@ -599,7 +604,7 @@ function buscaCliente(){
   const el = document.getElementById("busca-results");
   if(!q || q.length < 2){ el.style.display="none"; return; }
   const matches = clientes.filter(c =>
-    c.nome.toLowerCase().includes(q) ||
+    (c.nome||"").toLowerCase().includes(q) ||
     c.cpf.includes(q.replace(/\D/g,"")) ||
     cpfFmt(c.cpf).includes(q)
   ).slice(0,8);
@@ -889,7 +894,7 @@ async function salvarCliente(){
 // ===== RENDER CLIENTES =====
 function renderClientes(){
   const q = (document.getElementById("filtro-clientes")?.value||"").toLowerCase();
-  const lista = clientes.filter(c=>!q||c.nome.toLowerCase().includes(q)||cpfFmt(c.cpf).includes(q));
+  const lista = clientes.filter(c=>!q||(c.nome||"").toLowerCase().includes(q)||cpfFmt(c.cpf||"").includes(q));
   const el = document.getElementById("tabela-clientes");
   if(!lista.length){ el.innerHTML=`<div class="empty-state"><i class="ti ti-users"></i><p>Nenhum cliente cadastrado.</p></div>`; return; }
   el.innerHTML=`<table><thead><tr>
