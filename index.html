@@ -235,6 +235,7 @@ tr:hover td{background:#fafbfd}
 .cpf-ok{display:none;color:var(--green);font-size:11px;align-items:center;gap:3px;font-weight:700}
 .cpf-err-msg{display:none;color:var(--red);font-size:11px;font-weight:700}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
@@ -463,23 +464,90 @@ let clienteAtivo = null;
 let pecaSel = null;
 let opcaoSel = null;
 
-// ===== STORAGE =====
-function loadAll(){
-  try{ clientes = JSON.parse(localStorage.getItem("vg_clientes")||"[]"); }catch(e){clientes=[];}
-  try{ resgates = JSON.parse(localStorage.getItem("vg_resgates2")||"[]"); }catch(e){resgates=[];}
+// ===== SUPABASE =====
+const SUPABASE_URL = "https://wwdlntucbfzvtpfalmgg.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3ZGxudHVjYmZ6dnRwZmFsbWdnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwNjA2MzksImV4cCI6MjA5NjYzNjYzOX0.2XR3w3_zfAVCXMNydYs56v-dbN-zuDC0-zwGUO0c2nk";
+let sb = null;
+
+function initSupabase(){
+  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 }
-function saveAll(){
-  localStorage.setItem("vg_clientes", JSON.stringify(clientes));
-  localStorage.setItem("vg_resgates2", JSON.stringify(resgates));
+
+// ===== STORAGE =====
+async function loadAll(){
+  showLoadingOverlay(true);
+  try {
+    const [{ data: cls }, { data: res }] = await Promise.all([
+      sb.from("clientes").select("*").order("nome"),
+      sb.from("resgates").select("*").order("data", { ascending: false })
+    ]);
+    clientes = cls || [];
+    resgates = res || [];
+  } catch(e) {
+    console.error("Erro ao carregar dados:", e);
+    clientes = []; resgates = [];
+  }
+  // Normalize Supabase lowercase column names to camelCase
+  clientes = clientes.map(c => ({
+    ...c,
+    dataCad: c.datacad || c.dataCad || c.created_at || ""
+  }));
+  resgates = resgates.map(r => ({
+    ...r,
+    nomeCliente: r.nomecliente || r.nomeCliente || "",
+    pecaId: r.pecaid || r.pecaId || "",
+    pecaNome: r.pecanome || r.pecaNome || ""
+  }));
+  showLoadingOverlay(false);
+}
+
+async function saveCliente(cliente){
+  const { error } = await sb.from("clientes").upsert(cliente, { onConflict: "cpf" });
+  if(error) console.error("Erro ao salvar cliente:", error);
+}
+
+async function saveResgate(reg){
+  const { error } = await sb.from("resgates").insert(reg);
+  if(error) console.error("Erro ao salvar resgate:", error);
+}
+
+async function deleteResgate(id){
+  const { error } = await sb.from("resgates").delete().eq("id", id);
+  if(error) console.error("Erro ao excluir resgate:", error);
+}
+
+async function deleteClienteEResgates(cpf){
+  await sb.from("resgates").delete().eq("cpf", cpf);
+  await sb.from("clientes").delete().eq("cpf", cpf);
+}
+
+function showLoadingOverlay(show){
+  let el = document.getElementById("loading-overlay");
+  if(!el){
+    el = document.createElement("div");
+    el.id = "loading-overlay";
+    el.style.cssText = "display:none;position:fixed;inset:0;background:rgba(255,255,255,.7);z-index:9999;align-items:center;justify-content:center;flex-direction:column;gap:12px";
+    el.innerHTML = '<div style="width:40px;height:40px;border:3px solid #e2e8f0;border-top-color:#1a3a5c;border-radius:50%;animation:spin .7s linear infinite"></div><span style="font-size:13px;color:#1a3a5c;font-weight:700">Sincronizando...</span>';
+    if(!document.getElementById("spin-style")){
+      const s = document.createElement("style");
+      s.id = "spin-style";
+      s.textContent = "@keyframes spin{to{transform:rotate(360deg)}}";
+      document.head.appendChild(s);
+    }
+    document.body.appendChild(el);
+  }
+  el.style.display = show ? "flex" : "none";
 }
 
 // ===== LOGIN =====
-function doLogin(){
+async function doLogin(){
   if(document.getElementById("login-pw").value === SENHA){
     document.getElementById("screen-login").style.display="none";
     document.getElementById("screen-app").style.display="block";
     document.getElementById("periodo-badge").style.display="flex";
-    loadAll(); renderMiniStats(); renderClientes(); renderRelatorio(); renderHistorico();
+    initSupabase();
+    await loadAll();
+    renderMiniStats(); renderClientes(); renderRelatorio(); renderHistorico();
   } else {
     document.getElementById("login-err").style.display="flex";
   }
@@ -669,26 +737,28 @@ function abrirConfirmar(){
   document.getElementById("modal-confirmar").classList.add("open");
 }
 
-function confirmarResgate(){
+async function confirmarResgate(){
   fecharModal("modal-confirmar");
-  const c = clienteAtivo;
+  const cl = clienteAtivo;
   const p = pecaSel;
   const tab = opcaoSel==="I" ? p.tabI : p.tabII;
   const reg = {
     id: Date.now()+"_"+Math.random().toString(36).slice(2),
-    cpf: c.cpf, nomeCliente: c.nome,
-    pecaId: p.id, pecaNome: p.nome_completo,
+    cpf: cl.cpf, nomecliente: cl.nome,
+    pecaid: p.id, pecanome: p.nome_completo,
     tabela: opcaoSel, selos: tab.selos, compl: tab.compl,
     data: new Date().toISOString()
   };
-  resgates.push(reg);
-  saveAll();
+  await saveResgate(reg);
+  // normalize for local array
+  const regLocal = {...reg, nomeCliente: reg.nomecliente, pecaId: reg.pecaid, pecaNome: reg.pecanome};
+  resgates.unshift(regLocal);
   renderMiniStats();
   renderClienteBadge();
   renderPecas();
   document.getElementById("opcoes-section").style.display="none";
   pecaSel=null; opcaoSel=null;
-  imprimirComprovante(reg, c, p);
+  imprimirComprovante(regLocal, cl, p);
 }
 
 function imprimirComprovante(reg, cl, p){
@@ -800,17 +870,18 @@ function validarCad(){
   document.getElementById("btn-salvar-cliente").disabled = !ok || nome.length<3 || raw.length!==11;
 }
 
-function salvarCliente(){
+async function salvarCliente(){
   const nome = document.getElementById("cad-nome").value.trim();
   const raw = cpfRaw(document.getElementById("cad-cpf").value);
   if(nome.length<3 || !validarCPF(raw)) return;
-  clientes.push({cpf:raw, nome, dataCad:new Date().toISOString()});
-  saveAll();
+  const novo = {cpf:raw, nome, datacad:new Date().toISOString()};
+  await saveCliente(novo);
+  const novoLocal = {...novo, dataCad: novo.datacad};
+  if(!clientes.find(x=>x.cpf===raw)) clientes.push(novoLocal);
   fecharModal("modal-cadastro");
   renderClientes();
   const al = document.getElementById("cad-alert");
   al.style.display="none";
-  // auto-selecionar o cliente cadastrado
   selecionarCliente(raw);
   goTab("resgate", document.querySelector(".nav-btn"));
 }
@@ -933,7 +1004,7 @@ function renderHistorico(){
   el.innerHTML=`<table><thead><tr>
     <th>Data</th><th>Cliente</th><th>CPF</th><th>Produto</th><th>Tabela</th><th>Selos</th><th>Complemento</th><th></th>
   </tr></thead><tbody>${lista.map(r=>{
-    const p=PECAS.find(x=>x.id===r.pecaId);
+    const p=PECAS.find(x=>x.id===(r.pecaId||r.pecaid));
     return `<tr>
       <td style="font-size:11px;color:var(--text2)">${dataFmt(r.data)}</td>
       <td><div style="display:flex;align-items:center;gap:6px"><div class="search-avatar" style="width:26px;height:26px;font-size:10px;flex-shrink:0">${initials(r.nomeCliente)}</div>${r.nomeCliente}</div></td>
@@ -950,7 +1021,7 @@ function renderHistorico(){
 
 
 // ===== EXCLUIR CLIENTE =====
-function excluirCliente(cpf){
+async function excluirCliente(cpf){
   const cl = clientes.find(x=>x.cpf===cpf);
   if(!cl) return;
   const qtdResgates = resgates.filter(r=>r.cpf===cpf).length;
@@ -958,14 +1029,13 @@ function excluirCliente(cpf){
     ? `Excluir o cliente "${cl.nome}" e todos os seus ${qtdResgates} resgate(s) vinculados? Esta ação não pode ser desfeita.`
     : `Excluir o cliente "${cl.nome}"? Esta ação não pode ser desfeita.`;
   if(!confirm(msg)) return;
+  await deleteClienteEResgates(cpf);
   clientes = clientes.filter(x=>x.cpf!==cpf);
   resgates = resgates.filter(r=>r.cpf!==cpf);
-  saveAll();
   renderClientes();
   renderMiniStats();
   renderRelatorio();
   renderHistorico();
-  // If active client was this one, clear resgate area
   if(clienteAtivo && clienteAtivo.cpf===cpf){
     clienteAtivo=null;
     document.getElementById('resgate-area').style.display='none';
@@ -973,11 +1043,12 @@ function excluirCliente(cpf){
 }
 
 // ===== EXCLUIR LANCAMENTO =====
-function excluirLancamento(id){
+async function excluirLancamento(id){
   if(!confirm("Excluir este lançamento? Esta ação não pode ser desfeita.")) return;
+  await deleteResgate(id);
   resgates = resgates.filter(r=>r.id!==id);
-  saveAll(); renderHistorico(); renderMiniStats(); renderRelatorio();
-  if(clienteAtivo) renderClienteBadge();
+  renderHistorico(); renderMiniStats(); renderRelatorio();
+  if(clienteAtivo){ renderClienteBadge(); renderPecas(); }
 }
 
 // ===== EXPORT =====
@@ -1012,7 +1083,7 @@ function abrirDesfazerResgate(){
   } else {
     document.getElementById('desfazer-empty').style.display = 'none';
     document.getElementById('desfazer-lista').innerHTML = resg.map(r => {
-      const p = PECAS.find(x=>x.id===r.pecaId);
+      const p = PECAS.find(x=>x.id===(r.pecaId||r.pecaid));
       const tab = r.tabela==='I' ? p.tabI : p.tabII;
       return `<div style="display:flex;align-items:center;gap:12px;padding:.85rem;border:1.5px solid var(--border);border-radius:var(--r-lg);margin-bottom:8px;background:#fff">
         <img src="${p.img}" style="width:50px;height:50px;object-fit:contain;flex-shrink:0;background:#f8f8f8;border-radius:var(--r);padding:3px">
@@ -1033,13 +1104,13 @@ function abrirDesfazerResgate(){
   document.getElementById('modal-desfazer').classList.add('open');
 }
 
-function confirmarDesfazer(id){
+async function confirmarDesfazer(id){
   const reg = resgates.find(r=>r.id===id);
   if(!reg) return;
-  const p = PECAS.find(x=>x.id===reg.pecaId);
+  const p = PECAS.find(x=>x.id===(reg.pecaId||reg.pecaid));
   if(!confirm('Remover o resgate de "' + p.nome + '" deste cliente? Esta ação não pode ser desfeita.')) return;
+  await deleteResgate(id);
   resgates = resgates.filter(r=>r.id!==id);
-  saveAll();
   renderMiniStats();
   renderHistorico();
   if(clienteAtivo){
@@ -1047,9 +1118,7 @@ function confirmarDesfazer(id){
     renderPecas();
     document.getElementById('opcoes-section').style.display='none';
     pecaSel=null; opcaoSel=null;
-    // Refresh the modal list
     abrirDesfazerResgate();
-    // If client has no resgates left, close modal
     const remaining = resgates.filter(r=>r.cpf===clienteAtivo.cpf);
     if(remaining.length===0){
       setTimeout(()=>fecharModal('modal-desfazer'), 500);
