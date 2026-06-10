@@ -1151,7 +1151,6 @@ function pedirSenhaExclusao(mensagem, callback){
 
 function fecharModalExclusao(){
   document.getElementById("modal-excluir-senha").classList.remove("open");
-  _excluirCallback = null;
 }
 
 async function executarExclusao(){
@@ -1165,9 +1164,7 @@ async function executarExclusao(){
   const cb = _excluirCallback;
   _excluirCallback = null;
   document.getElementById("modal-excluir-senha").classList.remove("open");
-  if(cb){
-    try{ await cb(); }catch(e){ console.error("Erro na exclusão:", e); alert("Erro ao excluir: "+e.message); }
-  }
+  if(cb){ await cb(); }
 }
 
 // ===== UTIL =====
