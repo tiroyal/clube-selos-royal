@@ -295,7 +295,7 @@ tr:hover td{background:#fafbfd}
         <div style="position:relative">
           <div class="input-wrap" style="margin-bottom:.5rem">
             <i class="ti ti-search icon-pre"></i>
-            <input type="text" class="input-icon" id="busca-cliente" placeholder="Buscar por nome ou CPF..." oninput="buscaCliente()" onkeydown="buscaClienteKeydown(event)" autocomplete="off">
+            <input type="text" class="input-icon" id="busca-cliente" placeholder="Buscar por nome, CPF ou CNPJ..." oninput="buscaCliente()" onkeydown="buscaClienteKeydown(event)" autocomplete="off">
           </div>
           <div class="search-results" id="busca-results" style="display:none"></div>
         </div>
@@ -407,9 +407,9 @@ tr:hover td{background:#fafbfd}
         <div class="field-hint" id="cad-nome-hint"></div>
       </div>
       <div class="field-group">
-        <label class="field-label">CPF *</label>
+        <label class="field-label">CPF / CNPJ *</label>
         <div style="position:relative">
-          <input type="text" id="cad-cpf" placeholder="000.000.000-00" maxlength="14" oninput="fmtCPF(this);validarCad()" onkeydown="if(event.key==='Enter')salvarCliente()">
+          <input type="text" id="cad-cpf" placeholder="CPF ou CNPJ" maxlength="18" oninput="fmtCPF(this);validarCad()" onkeydown="if(event.key==='Enter')salvarCliente()">
         </div>
         <div class="field-hint" id="cad-cpf-hint"></div>
       </div>
@@ -484,8 +484,11 @@ async function loadAll(){
       sb.from("clientes").select("cpf, nome, datacad").order("nome"),
       sb.from("resgates").select("id, cpf, nomecliente, pecaid, pecanome, tabela, selos, compl, data").order("data", { ascending: false })
     ]);
-    if(resClientes.error) console.error("Clientes error:", resClientes.error);
-    if(resResgates.error) console.error("Resgates error:", resResgates.error);
+    if(resClientes.error || resResgates.error){
+      const msg = (resClientes.error||resResgates.error)?.message || "Erro desconhecido";
+      console.error("Load error:", msg);
+      alert("⚠️ Erro ao conectar com o banco de dados:\n"+msg+"\n\nVerifique se o projeto Supabase está ativo e tente recarregar a página.");
+    }
     clientes = resClientes.data || [];
     resgates = resResgates.data || [];
   } catch(e) {
@@ -516,7 +519,10 @@ async function saveCliente(cliente){
 
 async function saveResgate(reg){
   const { error } = await sb.from("resgates").insert(reg);
-  if(error) console.error("Erro ao salvar resgate:", error);
+  if(error){
+    console.error("Erro ao salvar resgate:", error);
+    throw new Error("Falha ao salvar no banco: " + (error.message||JSON.stringify(error)));
+  }
 }
 
 async function deleteResgate(id){
@@ -578,24 +584,50 @@ function goTab(name, btn){
   if(name==="clientes") renderClientes();
 }
 
-// ===== CPF =====
+// ===== CPF / CNPJ =====
 function fmtCPF(el){
-  let v=el.value.replace(/\D/g,"").slice(0,11);
-  if(v.length>9)v=v.replace(/(\d{3})(\d{3})(\d{3})(\d{0,2})/,"$1.$2.$3-$4");
-  else if(v.length>6)v=v.replace(/(\d{3})(\d{3})(\d{0,3})/,"$1.$2.$3");
-  else if(v.length>3)v=v.replace(/(\d{3})(\d{0,3})/,"$1.$2");
+  let v=el.value.replace(/\D/g,"").slice(0,14);
+  if(v.length<=11){
+    if(v.length>9)v=v.replace(/(\d{3})(\d{3})(\d{3})(\d{0,2})/,"$1.$2.$3-$4");
+    else if(v.length>6)v=v.replace(/(\d{3})(\d{3})(\d{0,3})/,"$1.$2.$3");
+    else if(v.length>3)v=v.replace(/(\d{3})(\d{0,3})/,"$1.$2");
+  } else {
+    v=v.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})/,"$1.$2.$3/$4-$5");
+  }
   el.value=v;
 }
 function validarCPF(cpf){
   const n=cpf.replace(/\D/g,"");
-  if(n.length!==11||/^(\d)+$/.test(n))return false;
+  if(n.length!==11||/^(\d)\1+$/.test(n))return false;
   let s=0; for(let i=0;i<9;i++)s+=+n[i]*(10-i);
   let r=(s*10)%11; if(r===10||r===11)r=0; if(r!==+n[9])return false;
   s=0; for(let i=0;i<10;i++)s+=+n[i]*(11-i);
   r=(s*10)%11; if(r===10||r===11)r=0; return r===+n[10];
 }
-function cpfFmt(raw){ return raw.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,"$1.$2.$3-$4"); }
-function cpfRaw(s){ return s.replace(/\D/g,""); }
+function validarCNPJ(cnpj){
+  const n=cnpj.replace(/\D/g,"");
+  if(n.length!==14||/^(\d)\1+$/.test(n))return false;
+  let s=0,p=5;
+  for(let i=0;i<12;i++){s+=+n[i]*p--;if(p<2)p=9;}
+  let r=s%11<2?0:11-(s%11); if(r!==+n[12])return false;
+  s=0;p=6;
+  for(let i=0;i<13;i++){s+=+n[i]*p--;if(p<2)p=9;}
+  r=s%11<2?0:11-(s%11); return r===+n[13];
+}
+function validarDoc(raw){
+  if(raw.length===11)return validarCPF(raw);
+  if(raw.length===14)return validarCNPJ(raw);
+  return false;
+}
+function cpfFmt(raw){
+  const n=(raw||'').replace(/\D/g,'');
+  if(n.length===14)return n.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/,'$1.$2.$3/$4-$5');
+  if(n.length===11)return n.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3-$4');
+  return raw;
+}
+function cpfRaw(s){ return s.replace(/\D/g,''); }
+function docTipo(raw){ return raw.length===14?'CNPJ':'CPF'; }
+
 function initials(nome){ if(!nome) return '?'; return nome.split(" ").slice(0,2).map(w=>w[0]).join("").toUpperCase(); }
 function moeda(v){ return "R$ "+v.toFixed(2).replace(".",","); }
 function hoje(){ return new Date().toDateString(); }
@@ -804,7 +836,7 @@ function abrirConfirmar(){
     </div>
     <table style="width:100%;font-size:13px;border-collapse:collapse">
       <tr><td style="padding:6px 0;color:var(--text2);font-weight:600">Cliente</td><td style="padding:6px 0;font-weight:700">${c.nome}</td></tr>
-      <tr><td style="padding:6px 0;color:var(--text2);font-weight:600">CPF</td><td style="padding:6px 0" class="mono">${cpfFmt(c.cpf)}</td></tr>
+      <tr><td style="padding:6px 0;color:var(--text2);font-weight:600">CPF / CNPJ</td><td style="padding:6px 0" class="mono">${cpfFmt(c.cpf)}</td></tr>
       <tr><td style="padding:6px 0;color:var(--text2);font-weight:600">Produto</td><td style="padding:6px 0;font-weight:700">${p.nome}</td></tr>
       <tr><td style="padding:6px 0;color:var(--text2);font-weight:600">Modalidade</td><td style="padding:6px 0"><span class="badge badge-blue">Tabela ${opcaoSel}</span></td></tr>
       <tr><td style="padding:6px 0;color:var(--text2);font-weight:600">Selos necessários</td><td style="padding:6px 0;font-weight:800;color:var(--royal-blue)">${tab.selos} selos</td></tr>
@@ -825,7 +857,12 @@ async function confirmarResgate(){
     tabela: opcaoSel, selos: tab.selos, compl: tab.compl,
     data: new Date().toISOString()
   };
-  await saveResgate(reg);
+  try{
+    await saveResgate(reg);
+  } catch(e){
+    alert("⚠️ ERRO AO SALVAR RESGATE!\n\n"+e.message+"\n\nVerifique a conexão com o banco de dados e tente novamente.\nO resgate NÃO foi registrado.");
+    return;
+  }
   // normalize for local array
   const regLocal = {...reg, nomeCliente: reg.nomecliente, pecaId: reg.pecaid, pecaNome: reg.pecanome};
   resgates.unshift(regLocal);
@@ -856,73 +893,90 @@ function imprimirComprovante(reg, cl, p){
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Comprovante de Resgate</title>
+<title>Comprovante</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  @page{size:80mm auto;margin:3mm 5mm}
-  body{background:#fff;font-family:'Courier New','Courier',monospace;font-size:11px;line-height:1.5;color:#000;width:70mm;margin:0 auto;padding:0}
-  .center{text-align:center}
-  .bold{font-weight:bold}
-  .divisor{border:none;border-top:1px dashed #000;margin:5px 0}
-  .divisor-solid{border:none;border-top:2px solid #000;margin:5px 0}
-  .section{margin-bottom:4px}
-  .title{font-weight:bold;font-size:11px;text-transform:uppercase;margin-bottom:2px}
-  .row{display:flex;justify-content:space-between;margin:2px 0}
-  .row span:last-child{font-weight:bold}
-  .peca-img{width:46mm;display:block;margin:6px auto}
-  .nome-peca{font-size:13px;font-weight:900;text-align:center;margin:4px 0 2px}
-  .nome-completo{font-size:10px;text-align:center;color:#333}
-  .protocolo{font-size:9px;word-break:break-all}
-  .footer{text-align:center;font-size:10px;margin-top:6px;line-height:1.7}
-  .obrigado{font-size:13px;font-weight:900;text-align:center;margin-top:6px}
+  @page{size:80mm auto;margin:4mm 5mm}
+  body{
+    background:#fff;
+    font-family:Arial,Helvetica,sans-serif;
+    font-size:13px;
+    font-weight:bold;
+    line-height:1.7;
+    color:#000;
+    width:68mm;
+    margin:0 auto;
+  }
+  hr{border:none;border-top:1.5px dashed #000;margin:7px 0}
+  hr.solid{border-top:3px solid #000;margin:8px 0}
+  .c{text-align:center}
+  .titulo{font-size:20px;font-weight:900;text-align:center;letter-spacing:0.5px;margin-bottom:2px}
+  .sub{font-size:12px;font-weight:bold;text-align:center}
+  .comprov{font-size:15px;font-weight:900;text-align:center;margin-bottom:2px}
+  .data{font-size:12px;text-align:center}
+  .sec{
+    font-size:13px;font-weight:900;text-transform:uppercase;
+    border-bottom:2px solid #000;padding-bottom:3px;margin-bottom:5px;
+    letter-spacing:0.5px;
+  }
+  .campo{margin:4px 0;font-size:13px}
+  .lbl{font-weight:900}
+  .img{width:48mm;display:block;margin:8px auto}
+  .pnome{font-size:16px;font-weight:900;text-align:center;margin:6px 0 3px}
+  .pdesc{font-size:11px;font-weight:bold;text-align:center;color:#222}
+  .row{display:flex;justify-content:space-between;align-items:baseline;margin:5px 0;font-size:14px}
+  .row .v{font-size:16px;font-weight:900}
+  .row-sm{display:flex;justify-content:space-between;margin:4px 0;font-size:13px}
+  .prot{font-size:10px;font-weight:bold;word-break:break-all;font-family:monospace;margin-top:2px}
+  .rod{text-align:center;font-size:12px;font-weight:bold;line-height:1.8;margin-top:6px}
+  .obg{font-size:17px;font-weight:900;text-align:center;margin-top:8px;letter-spacing:0.3px}
   @media print{body{margin:0}button{display:none}}
 </style>
 </head>
 <body>
-  <div class="section center">
-    <div class="bold" style="font-size:14px">CLUBE DE SELOS ROYAL</div>
-    <div>Germer Verdigris - Campanha 2026</div>
-    <div>15/06/2026 a 05/09/2026</div>
-  </div>
-  <hr class="divisor-solid">
-  <div class="center bold" style="font-size:12px">COMPROVANTE DE RESGATE</div>
-  <div class="center">${dataStr}</div>
-  <hr class="divisor">
-  <div class="section">
-    <div class="title">Cliente</div>
-    <div>Nome: <strong>${nomeCliente}</strong></div>
-    <div>CPF: ${cpfFmt(cl.cpf)}</div>
-  </div>
-  <hr class="divisor">
-  <div class="section">
-    <div class="title">Produto</div>
-    <img class="peca-img" src="${p.img}" alt="${nomeProduto}">
-    <div class="nome-peca">${nomeProduto}</div>
-    <div class="nome-completo">${nomeCompleto}</div>
-  </div>
-  <hr class="divisor">
-  <div class="section">
-    <div class="title">Troca - Tabela ${reg.tabela}</div>
-    <div class="row"><span>Selos:</span><span>${tab.selos} selos</span></div>
-    <div class="row"><span>Complemento:</span><span>${compl}</span></div>
-    <div class="row"><span>Preco original:</span><span>${preco}</span></div>
-  </div>
-  <hr class="divisor">
-  <div class="section">
-    <div class="title">Protocolo</div>
-    <div class="protocolo">${protocolo}</div>
-  </div>
-  <hr class="divisor-solid">
-  <div class="footer">
-    <div>Selos e cartelas retidos no ato do resgate.</div>
-    <div>Regulamento: superroyal.com.br</div>
-  </div>
-  <div class="obrigado">Obrigado pela preferencia!</div>
+
+<div class="titulo">CLUBE DE SELOS ROYAL</div>
+<div class="sub">Germer Verdigris - Campanha 2026</div>
+<div class="sub">15/06/2026 a 05/09/2026</div>
+
+<hr class="solid">
+<div class="comprov">COMPROVANTE DE RESGATE</div>
+<div class="data">${dataStr}</div>
+<hr>
+
+<div class="sec">Cliente</div>
+<div class="campo"><span class="lbl">Nome: </span>${nomeCliente}</div>
+<div class="campo"><span class="lbl">CPF: </span>${cpfFmt(cl.cpf)}</div>
+<hr>
+
+<div class="sec c">Produto</div>
+<img class="img" src="${p.img}" alt="${nomeProduto}">
+<div class="pnome">${nomeProduto}</div>
+<div class="pdesc">${nomeCompleto}</div>
+<hr>
+
+<div class="sec">Troca - Tabela ${reg.tabela}</div>
+<div class="row"><span>Selos:</span><span class="v">${tab.selos} selos</span></div>
+<div class="row"><span>Complemento:</span><span class="v">${compl}</span></div>
+<hr>
+<div class="row-sm"><span>Preco original:</span><span>${preco}</span></div>
+<hr>
+
+<div class="sec">Protocolo</div>
+<div class="prot">${protocolo}</div>
+
+<hr class="solid">
+<div class="rod">
+  <div>Selos e cartelas retidos no ato do resgate.</div>
+  <div>Regulamento: superroyal.com.br</div>
+</div>
+<div class="obg">Obrigado pela preferencia!</div>
+
 <script>window.onload=function(){window.print();window.onafterprint=function(){window.close();};};<\/script>
 </body>
 </html>`;
 
-  const win = window.open('','_blank','width=420,height=750,scrollbars=yes');
+  const win = window.open('','_blank','width=440,height=800,scrollbars=yes');
   if(win){ win.document.write(htmlContent); win.document.close(); }
   else { alert('Permita pop-ups para esta pagina para imprimir o comprovante.'); }
 }
@@ -953,29 +1007,29 @@ function abrirModalCadastro(){
 
 function validarCad(){
   const nome = document.getElementById("cad-nome").value.trim();
-  const cpfVal = document.getElementById("cad-cpf").value;
-  const raw = cpfRaw(cpfVal);
+  const raw  = cpfRaw(document.getElementById("cad-cpf").value);
   let ok = true;
-  // nome
   const nh = document.getElementById("cad-nome-hint");
-  if(nome.length < 3 && nome.length > 0){ nh.textContent="Nome muito curto."; nh.className="field-hint err"; ok=false; }
-  else if(nome.length >= 3){ nh.textContent="✓ Nome válido."; nh.className="field-hint ok"; }
-  else { nh.textContent=""; nh.className="field-hint"; ok=false; }
-  // cpf
+  if(nome.length<3 && nome.length>0){ nh.textContent="Nome muito curto."; nh.className="field-hint err"; ok=false; }
+  else if(nome.length>=3){ nh.textContent="✓ Nome válido."; nh.className="field-hint ok"; }
+  else{ nh.textContent=""; nh.className="field-hint"; ok=false; }
   const ch = document.getElementById("cad-cpf-hint");
-  if(raw.length===11){
-    if(!validarCPF(raw)){ ch.textContent="CPF inválido (dígitos verificadores incorretos)."; ch.className="field-hint err"; ok=false; }
-    else if(clientes.find(c=>c.cpf===raw)){ ch.textContent="Este CPF já está cadastrado."; ch.className="field-hint err"; ok=false; }
-    else { ch.textContent="✓ CPF válido."; ch.className="field-hint ok"; }
-  } else if(raw.length > 0){ ch.textContent="CPF incompleto."; ch.className="field-hint err"; ok=false; }
-  else { ch.textContent=""; ch.className="field-hint"; ok=false; }
-  document.getElementById("btn-salvar-cliente").disabled = !ok || nome.length<3 || raw.length!==11;
+  const tipo = docTipo(raw);
+  if(raw.length===11||raw.length===14){
+    if(!validarDoc(raw)){ ch.textContent=tipo+" inválido (dígitos verificadores incorretos)."; ch.className="field-hint err"; ok=false; }
+    else if(clientes.find(c=>c.cpf===raw)){ ch.textContent="Este "+tipo+" já está cadastrado."; ch.className="field-hint err"; ok=false; }
+    else{ ch.textContent="✓ "+tipo+" válido."; ch.className="field-hint ok"; }
+  } else if(raw.length>0){
+    const falta=raw.length<11?"CPF incompleto.":raw.length<14?"CNPJ incompleto.":"Documento inválido.";
+    ch.textContent=falta; ch.className="field-hint err"; ok=false;
+  } else{ ch.textContent=""; ch.className="field-hint"; ok=false; }
+  document.getElementById("btn-salvar-cliente").disabled = !ok||nome.length<3||(raw.length!==11&&raw.length!==14);
 }
 
 async function salvarCliente(){
   const nome = document.getElementById("cad-nome").value.trim();
   const raw = cpfRaw(document.getElementById("cad-cpf").value);
-  if(nome.length<3 || !validarCPF(raw)) return;
+  if(nome.length<3 || !validarDoc(raw)) return;
   const novo = {cpf:raw, nome, datacad:new Date().toISOString()};
   await saveCliente(novo);
   const novoLocal = {...novo, dataCad: novo.datacad};
@@ -991,11 +1045,11 @@ async function salvarCliente(){
 // ===== RENDER CLIENTES =====
 function renderClientes(){
   const q = (document.getElementById("filtro-clientes")?.value||"").toLowerCase();
-  const lista = clientes.filter(c=>!q||(c.nome||"").toLowerCase().includes(q)||cpfFmt(c.cpf||"").includes(q));
+  const lista = clientes.filter(c=>!q||(c.nome||"").toLowerCase().includes(q)||cpfFmt(c.cpf||"").includes(q)||(c.cpf||"").includes(q.replace(/\D/g,"")));
   const el = document.getElementById("tabela-clientes");
   if(!lista.length){ el.innerHTML=`<div class="empty-state"><i class="ti ti-users"></i><p>Nenhum cliente cadastrado.</p></div>`; return; }
   el.innerHTML=`<table><thead><tr>
-    <th>Nome</th><th>CPF</th><th>Resgates</th><th>Selos usados</th><th>Coleção</th><th></th>
+    <th>Nome</th><th>CPF / CNPJ</th><th>Resgates</th><th>Selos usados</th><th>Coleção</th><th></th>
   </tr></thead><tbody>${lista.map(c=>{
     const r=resgates.filter(x=>x.cpf===c.cpf);
     const selos=r.reduce((a,b)=>a+b.selos,0);
