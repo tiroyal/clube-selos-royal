@@ -422,6 +422,27 @@ tr:hover td{background:#fafbfd}
   </div>
 </div>
 
+<!-- ===== MODAL EDITAR CLIENTE ===== -->
+<div class="overlay" id="modal-editar-cliente">
+  <div class="modal">
+    <div class="modal-header">
+      <h3><i class="ti ti-edit" style="color:var(--royal-blue)"></i> Editar cliente</h3>
+      <button class="btn-modal-close" onclick="fecharModal('modal-editar-cliente')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="field-group">
+        <label class="field-label">Nome completo *</label>
+        <input type="text" id="edit-nome" placeholder="Nome do cliente" oninput="validarEdicaoCliente()" onkeydown="if(event.key==='Enter')salvarEdicaoCliente()">
+        <div class="field-hint" id="edit-nome-hint"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="fecharModal('modal-editar-cliente')">Cancelar</button>
+      <button class="btn btn-blue" id="btn-salvar-edicao-cliente" onclick="salvarEdicaoCliente()" disabled><i class="ti ti-check"></i> Salvar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== MODAL CONFIRMAR RESGATE ===== -->
 <div class="overlay" id="modal-confirmar">
   <div class="modal">
@@ -1054,6 +1075,43 @@ async function salvarCliente(){
   goTab("resgate", document.querySelector(".nav-btn"));
 }
 
+// ===== EDITAR CLIENTE (somente nome) =====
+let cpfEditando = null;
+
+function abrirEditarCliente(cpf){
+  const c = clientes.find(x=>x.cpf===cpf);
+  if(!c) return;
+  cpfEditando = cpf;
+  document.getElementById("edit-nome").value = c.nome||"";
+  document.getElementById("edit-nome-hint").textContent="";
+  document.getElementById("edit-nome-hint").className="field-hint";
+  document.getElementById("btn-salvar-edicao-cliente").disabled = true;
+  document.getElementById("modal-editar-cliente").classList.add("open");
+  setTimeout(()=>document.getElementById("edit-nome").focus(),100);
+}
+
+function validarEdicaoCliente(){
+  const nome = document.getElementById("edit-nome").value.trim();
+  const h = document.getElementById("edit-nome-hint");
+  const ok = nome.length>=3;
+  if(nome.length>0 && !ok){ h.textContent="Nome muito curto."; h.className="field-hint err"; }
+  else if(ok){ h.textContent="✓ Nome válido."; h.className="field-hint ok"; }
+  else{ h.textContent=""; h.className="field-hint"; }
+  document.getElementById("btn-salvar-edicao-cliente").disabled = !ok;
+}
+
+async function salvarEdicaoCliente(){
+  const nome = document.getElementById("edit-nome").value.trim();
+  if(nome.length<3 || !cpfEditando) return;
+  const c = clientes.find(x=>x.cpf===cpfEditando);
+  if(!c) return;
+  await saveCliente({cpf:c.cpf, nome, datacad:c.dataCad});
+  c.nome = nome;
+  fecharModal("modal-editar-cliente");
+  renderClientes();
+  cpfEditando = null;
+}
+
 // ===== RENDER CLIENTES =====
 function renderClientes(){
   const q = (document.getElementById("filtro-clientes")?.value||"").toLowerCase();
@@ -1079,6 +1137,7 @@ function renderClientes(){
       </td>
       <td style="display:flex;gap:4px">
         <button class="btn btn-sm" style="background:var(--royal-blue);color:#fff;gap:5px" onclick="goTab('resgate',document.querySelectorAll('.nav-btn')[0]);selecionarCliente('${c.cpf}')"><i class="ti ti-exchange"></i> Resgatar</button>
+        <button class="btn btn-sm" style="background:var(--royal-blue-light);color:var(--royal-blue);border:1.5px solid #bfdbfe;gap:5px" onclick="abrirEditarCliente('${c.cpf}')"><i class="ti ti-edit"></i> Editar</button>
         <button class="btn btn-sm" style="background:#fff5f5;color:var(--red);border:1.5px solid var(--red-b);gap:5px" onclick="excluirCliente('${c.cpf}')"><i class="ti ti-user-minus"></i> Excluir</button>
       </td>
     </tr>`;
