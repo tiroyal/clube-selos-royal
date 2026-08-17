@@ -461,13 +461,13 @@ const PECAS = [
    tabI:{selos:120,compl:39.90},tabII:{selos:60,compl:99.90},preco:349.90}
 ];
 
-// Estoque disponível por peça (SKU 91087+90797 somados no Ramekin, 2 tamanhos)
-const ESTOQUE_DISPONIVEL = {
-  P1: 385,  // 91088 SALEIRO GERMER PORCELANA UN
-  P2: 458, // ramekin sai em par (2 und./resgate), estoque disponível é a metade do total das 2 SKUs (91087+90797)
-  P3: 323,  // 90795 TRAVESSA GERMER REDONDA PORCELANA 021 (Forma 21cm)
-  P4: 234,  // 90796 TRAVESSA GERMER REDONDA PORCELANA 025 (Forma 25cm)
-  P5: 132   // 90798 TRAVESSA GERMER RETANGULAR PORCELANA 37X26
+// Estoque TOTAL fixo da campanha por peça (retiradas + disponível no anexo, no dia da contagem)
+const ESTOQUE_TOTAL = {
+  P1: 487,  // 102 retiradas + 385 disponível (91088 SALEIRO GERMER PORCELANA UN)
+  P2: 458,  // total informado (ramekin sai em par, 2 und./resgate)
+  P3: 381,  // 58 retiradas + 323 disponível (90795 TRAVESSA GERMER REDONDA PORCELANA 021 / Forma 21cm)
+  P4: 463,  // 229 retiradas + 234 disponível (90796 TRAVESSA GERMER REDONDA PORCELANA 025 / Forma 25cm)
+  P5: 350   // 218 retiradas + 132 disponível (90798 TRAVESSA GERMER RETANGULAR PORCELANA 37X26)
 };
 
 let clientes = [];
@@ -1108,8 +1108,7 @@ function renderRelatorio(){
   const pp=document.getElementById("stats-por-produto");
   pp.innerHTML=PECAS.map(p=>{
     const qt=resgates.filter(r=>r.pecaId===p.id).length;
-    const disp=ESTOQUE_DISPONIVEL[p.id]||0;
-    const max=qt+disp;
+    const max=ESTOQUE_TOTAL[p.id]||0;
     const pct=max?Math.round(qt/max*100):0;
     return `<div style="display:flex;align-items:center;gap:12px;margin-bottom:.85rem">
       <img src="${p.img}" style="width:36px;height:36px;object-fit:contain;flex-shrink:0">
