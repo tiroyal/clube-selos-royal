@@ -778,11 +778,14 @@ function renderClienteBadge(){
     </div>`;
 }
 
+// Peças com troca limitada a 1 unidade por CPF. Saleiro, Ramekin e Forma 21cm liberados para múltiplas trocas.
+const PECAS_LIMITADAS = new Set(["P4","P5"]);
+
 function renderPecas(){
   const ja = new Set(resgates.filter(r=>r.cpf===clienteAtivo.cpf).map(r=>r.pecaId));
   const g = document.getElementById("pecas-grid");
   g.innerHTML = PECAS.map(p=>{
-    const feito = ja.has(p.id);
+    const feito = PECAS_LIMITADAS.has(p.id) && ja.has(p.id);
     const sel = pecaSel && pecaSel.id===p.id;
     return `<div class="peca-card${feito?" done":sel?" sel":""}" onclick="selecionarPeca('${p.id}')">
       <div class="peca-img"><img src="${p.img}" alt="${p.nome}"></div>
@@ -798,7 +801,7 @@ function renderPecas(){
 
 function selecionarPeca(id){
   const ja = new Set(resgates.filter(r=>r.cpf===clienteAtivo.cpf).map(r=>r.pecaId));
-  if(ja.has(id)){ return; }
+  if(PECAS_LIMITADAS.has(id) && ja.has(id)){ return; }
   pecaSel = PECAS.find(p=>p.id===id);
   opcaoSel = null;
   renderPecas();
