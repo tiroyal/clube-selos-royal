@@ -435,6 +435,13 @@ tr:hover td{background:#fafbfd}
         <input type="text" id="edit-nome" placeholder="Nome do cliente" oninput="validarEdicaoCliente()" onkeydown="if(event.key==='Enter')salvarEdicaoCliente()">
         <div class="field-hint" id="edit-nome-hint"></div>
       </div>
+      <div class="field-group">
+        <label class="field-label">CPF / CNPJ *</label>
+        <div style="position:relative">
+          <input type="text" id="edit-cpf" placeholder="CPF ou CNPJ" maxlength="18" oninput="fmtCPF(this);validarEdicaoCliente()" onkeydown="if(event.key==='Enter')salvarEdicaoCliente()">
+        </div>
+        <div class="field-hint" id="edit-cpf-hint"></div>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="fecharModal('modal-editar-cliente')">Cancelar</button>
@@ -545,6 +552,15 @@ async function loadAll(){
 async function saveCliente(cliente){
   const { error } = await sb.from("clientes").upsert(cliente, { onConflict: "cpf" });
   if(error) console.error("Erro ao salvar cliente:", error);
+}
+
+async function trocarCpfCliente(oldCpf, novoCliente){
+  const { error: eIns } = await sb.from("clientes").upsert(novoCliente, { onConflict: "cpf" });
+  if(eIns) throw new Error("Falha ao salvar novo CPF: " + eIns.message);
+  const { error: eUpd } = await sb.from("resgates").update({ cpf: novoCliente.cpf }).eq("cpf", oldCpf);
+  if(eUpd) throw new Error("Falha ao migrar resgates para o novo CPF: " + eUpd.message);
+  const { error: eDel } = await sb.from("clientes").delete().eq("cpf", oldCpf);
+  if(eDel) console.error("Erro ao remover cadastro antigo:", eDel);
 }
 
 async function saveResgate(reg){
@@ -1083,8 +1099,11 @@ function abrirEditarCliente(cpf){
   if(!c) return;
   cpfEditando = cpf;
   document.getElementById("edit-nome").value = c.nome||"";
+  document.getElementById("edit-cpf").value = cpfFmt(c.cpf||"");
   document.getElementById("edit-nome-hint").textContent="";
   document.getElementById("edit-nome-hint").className="field-hint";
+  document.getElementById("edit-cpf-hint").textContent="";
+  document.getElementById("edit-cpf-hint").className="field-hint";
   document.getElementById("btn-salvar-edicao-cliente").disabled = true;
   document.getElementById("modal-editar-cliente").classList.add("open");
   setTimeout(()=>document.getElementById("edit-nome").focus(),100);
@@ -1092,23 +1111,48 @@ function abrirEditarCliente(cpf){
 
 function validarEdicaoCliente(){
   const nome = document.getElementById("edit-nome").value.trim();
-  const h = document.getElementById("edit-nome-hint");
-  const ok = nome.length>=3;
-  if(nome.length>0 && !ok){ h.textContent="Nome muito curto."; h.className="field-hint err"; }
-  else if(ok){ h.textContent="✓ Nome válido."; h.className="field-hint ok"; }
-  else{ h.textContent=""; h.className="field-hint"; }
-  document.getElementById("btn-salvar-edicao-cliente").disabled = !ok;
+  const raw = cpfRaw(document.getElementById("edit-cpf").value);
+  let ok = true;
+  const nh = document.getElementById("edit-nome-hint");
+  if(nome.length<3 && nome.length>0){ nh.textContent="Nome muito curto."; nh.className="field-hint err"; ok=false; }
+  else if(nome.length>=3){ nh.textContent="✓ Nome válido."; nh.className="field-hint ok"; }
+  else{ nh.textContent=""; nh.className="field-hint"; ok=false; }
+  const ch = document.getElementById("edit-cpf-hint");
+  const tipo = docTipo(raw);
+  if(raw.length===11||raw.length===14){
+    if(!validarDoc(raw)){ ch.textContent=tipo+" inválido (dígitos verificadores incorretos)."; ch.className="field-hint err"; ok=false; }
+    else if(raw!==cpfEditando && clientes.find(c=>c.cpf===raw)){ ch.textContent="Este "+tipo+" já está cadastrado em outro cliente."; ch.className="field-hint err"; ok=false; }
+    else{ ch.textContent="✓ "+tipo+" válido."; ch.className="field-hint ok"; }
+  } else if(raw.length>0){
+    const falta=raw.length<11?"CPF incompleto.":raw.length<14?"CNPJ incompleto.":"Documento inválido.";
+    ch.textContent=falta; ch.className="field-hint err"; ok=false;
+  } else{ ch.textContent=""; ch.className="field-hint"; ok=false; }
+  document.getElementById("btn-salvar-edicao-cliente").disabled = !ok||nome.length<3||(raw.length!==11&&raw.length!==14);
 }
 
 async function salvarEdicaoCliente(){
   const nome = document.getElementById("edit-nome").value.trim();
-  if(nome.length<3 || !cpfEditando) return;
+  const raw = cpfRaw(document.getElementById("edit-cpf").value);
+  if(nome.length<3 || !validarDoc(raw) || !cpfEditando) return;
   const c = clientes.find(x=>x.cpf===cpfEditando);
   if(!c) return;
-  await saveCliente({cpf:c.cpf, nome, datacad:c.dataCad});
+  if(raw!==cpfEditando && clientes.find(x=>x.cpf===raw)) return;
+  try{
+    if(raw!==cpfEditando){
+      await trocarCpfCliente(cpfEditando, {cpf:raw, nome, datacad:c.dataCad});
+      c.cpf = raw;
+      resgates.filter(r=>r.cpf===cpfEditando).forEach(r=>r.cpf=raw);
+    } else {
+      await saveCliente({cpf:c.cpf, nome, datacad:c.dataCad});
+    }
+  } catch(e){
+    alert("⚠️ ERRO AO SALVAR ALTERAÇÃO!\n\n"+e.message);
+    return;
+  }
   c.nome = nome;
   fecharModal("modal-editar-cliente");
   renderClientes();
+  renderHistorico();
   cpfEditando = null;
 }
 
